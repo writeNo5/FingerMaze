@@ -11,8 +11,6 @@ let isWon = false;
 
 // 게임 상태 및 설정
 let currentDepth = 1;
-let startTime;
-let timerInterval;
 
 // [New] 설정 & 다국어 시스템
 let currentLanguage = 'ko'; // 'ko', 'en'
@@ -22,7 +20,6 @@ const translations = {
         instruction: "미로를 따라 하얀 빛을 목적지까지 인도하세요.",
         start: "탐험 시작",
         depth: "깊이",
-        time: "시간",
         restart: "재시작",
         color: "색상",
         descending: "하강 중..."
@@ -32,7 +29,6 @@ const translations = {
         instruction: "Guide the white light through the maze to the portal.",
         start: "START EXPLORING",
         depth: "DEPTH",
-        time: "TIME",
         restart: "RESTART",
         color: "COLOR",
         descending: "DESCENDING..."
@@ -128,7 +124,6 @@ function setup() {
                 hud.classList.remove('hidden');
                 updateHUDOnly();
             }
-            startTimer();
         };
     }
     textFont('Outfit');
@@ -493,31 +488,17 @@ function winGame() {
     if (isWon) return;
     isWon = true;
 
-    // [New] 기록 갱신 체크
     if (currentDepth > bestDepth) {
         bestDepth = currentDepth;
         saveRecords();
     }
 
-    clearInterval(timerInterval);
     if ("vibrate" in navigator) navigator.vibrate([100, 50, 200]);
     setTimeout(() => { currentDepth++; initGame(currentDepth); }, 2000);
 }
 
 function drawWinScreen() {
     textAlign(CENTER, CENTER); fill(255); textSize(35); text("DESCENDING...", width / 2, height / 2);
-}
-
-function startTimer() {
-    startTime = Date.now();
-    if (timerInterval) clearInterval(timerInterval);
-    timerInterval = setInterval(() => {
-        let elapsed = floor((Date.now() - startTime) / 1000);
-        let mins = floor(elapsed / 60).toString().padStart(2, '0');
-        let secs = (elapsed % 60).toString().padStart(2, '0');
-        const timerVal = document.getElementById('timer-val');
-        if (timerVal) timerVal.innerText = `${mins}:${secs}`;
-    }, 1000);
 }
 
 function Cell(c, r) {
@@ -561,7 +542,6 @@ function updateHUDOnly() {
 
     hud.innerHTML = `
         <div class="hud-item">${t('depth').toUpperCase()} <span id="level-val">${currentDepth * 10}m</span> ${bestDepth > 0 ? `<span class="record">⭐${bestDepth * 10}m</span>` : ''}</div>
-        <div class="hud-item">${t('time').toUpperCase()} <span id="timer-val">00:00</span></div>
         <div class="hud-item-btn-group">
             <button id="mini-restart" class="hud-btn">${t('restart').toUpperCase()}</button>
             <button id="theme-btn" class="hud-btn">${t('color').toUpperCase()}</button>
@@ -576,7 +556,6 @@ function updateHUDOnly() {
             if ("vibrate" in navigator) navigator.vibrate(30);
             currentDepth = 1;
             initGame(1);
-            startTimer();
         };
     }
 

@@ -6,9 +6,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Finger Maze - Haptic Exploration</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#00ffff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
     <!-- p5.js & Matter.js CDNs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(reg => console.log('SW Registered'))
+                    .catch(err => console.log('SW Registration failed:', err));
+            });
+        }
+    </script>
 </head>
 
 <body>
@@ -23,7 +39,6 @@
     </div>
     <div id="hud" class="hidden">
         <div class="hud-item">LEVEL <span id="level-val">1</span></div>
-        <div class="hud-item">TIME <span id="timer-val">00:00</span></div>
     </div>
     <div id="canvas-container"></div>
     <script src="sketch.js"></script>
