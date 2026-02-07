@@ -1,0 +1,206 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;600&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    touch-action: none;
+}
+
+body {
+    background-color: #050505;
+    color: #e0e0e0;
+    font-family: 'Outfit', sans-serif;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+}
+
+#canvas-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1;
+}
+
+#ui-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+    text-align: center;
+    pointer-events: none;
+    transition: opacity 1s ease-in-out;
+}
+
+h1 {
+    font-weight: 600;
+    font-size: 2.5rem;
+    letter-spacing: 4px;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    background: linear-gradient(to right, #ffffff, #555);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    opacity: 0.8;
+}
+
+p {
+    font-weight: 300;
+    font-size: 1rem;
+    color: #888;
+    margin-bottom: 2rem;
+}
+
+#start-button {
+    pointer-events: auto;
+    background: linear-gradient(135deg, rgba(0, 200, 255, 0.2), rgba(0, 255, 255, 0.1));
+    border: 2px solid rgba(0, 220, 255, 0.6);
+    color: #00ffff;
+    padding: 18px 40px;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 1.2rem;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    border-radius: 12px;
+    box-shadow: 0 0 30px rgba(0, 255, 255, 0.3), inset 0 0 20px rgba(0, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    position: relative;
+    overflow: hidden;
+    text-transform: uppercase;
+}
+
+#start-button::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(45deg, transparent, rgba(0, 255, 255, 0.3), transparent);
+    animation: portalSweep 3s linear infinite;
+}
+
+@keyframes portalSweep {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+#start-button:hover {
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 0 50px rgba(0, 255, 255, 0.6), inset 0 0 30px rgba(0, 255, 255, 0.2);
+    border-color: #00ffff;
+    background: linear-gradient(135deg, rgba(0, 220, 255, 0.3), rgba(0, 255, 255, 0.2));
+}
+
+canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1;
+    display: block;
+    cursor: none !important;
+    /* 시스템 커서 강제 숨김 */
+}
+
+#hud {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    z-index: 100;
+    pointer-events: none;
+    transition: opacity 0.5s;
+}
+
+.hud-item {
+    pointer-events: none;
+    background: linear-gradient(135deg, rgba(0, 200, 255, 0.1), rgba(0, 255, 255, 0.05));
+    padding: 10px 18px;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 220, 255, 0.3);
+    backdrop-filter: blur(10px);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    color: rgba(0, 255, 255, 0.6);
+    display: flex;
+    align-items: center;
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.2), inset 0 0 10px rgba(0, 255, 255, 0.05);
+}
+
+.hud-item span {
+    color: #00ffff;
+    margin-left: 8px;
+    font-weight: 700;
+    text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+}
+
+.hud-btn {
+    pointer-events: auto;
+    background: linear-gradient(135deg, rgba(0, 200, 255, 0.15), rgba(0, 255, 255, 0.08));
+    color: #00ffff;
+    border: 1px solid rgba(0, 220, 255, 0.4);
+    padding: 10px 18px;
+    border-radius: 12px;
+    font-family: 'Outfit', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.2), inset 0 0 10px rgba(0, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    animation: hudPulse 2s ease-in-out infinite;
+}
+
+@keyframes hudPulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 15px rgba(0, 255, 255, 0.2), inset 0 0 10px rgba(0, 255, 255, 0.05);
+    }
+
+    50% {
+        box-shadow: 0 0 25px rgba(0, 255, 255, 0.4), inset 0 0 15px rgba(0, 255, 255, 0.1);
+    }
+}
+
+.hud-btn:hover {
+    transform: translateY(-2px);
+    background: rgba(0, 255, 255, 0.2);
+    color: #fff;
+    box-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
+    border-color: #00ffff;
+}
+
+.hud-btn:active {
+    transform: scale(0.95);
+}
+
+.hidden {
+    display: none !important;
+}
+
+.fade-out {
+    opacity: 0;
+}
