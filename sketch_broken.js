@@ -1,6 +1,11 @@
 /**
- * Finger Maze: Abyssal Descent (Viscous & Heavy Tweak)
+ * Finger Maze: Abyssal Descent (Addictive Edition)
  * [Julian, Minho, Ken, Hana]
+ * 
+ * New Features:
+ * - Record System (Best Depth, Best Time)
+ * - Combo System (Consecutive Clear Bonus)
+ * - Depth-based Theme Evolution
  */
 
 let mazeWalls = [];
@@ -14,46 +19,17 @@ let currentDepth = 1;
 let startTime;
 let timerInterval;
 
-// [New] 설정 & 다국어 시스템
-let currentLanguage = 'ko'; // 'ko', 'en'
-const translations = {
-    ko: {
-        title: "Finger Maze",
-        instruction: "미로를 따라 하얀 빛을 목적지까지 인도하세요.",
-        start: "탐험 시작",
-        depth: "깊이",
-        time: "시간",
-        restart: "재시작",
-        color: "색상",
-        descending: "하강 중..."
-    },
-    en: {
-        title: "Finger Maze",
-        instruction: "Guide the white light through the maze to the portal.",
-        start: "START EXPLORING",
-        depth: "DEPTH",
-        time: "TIME",
-        restart: "RESTART",
-        color: "COLOR",
-        descending: "DESCENDING..."
-    }
-};
-
-function t(key) {
-    return translations[currentLanguage][key] || key;
-}
-
-// [New] 기록 시스템
+// [New] 기록 & 콤보 시스템
 let bestDepth = 0;
+let bestTime = Infinity;
+let comboCount = 0;
+let lastClearTime = 0;
+let comboTimeout = null;
+let levelStartTime = 0;
 
-// [New] 테마 시스템
+// [New] 설정 시스템
 let currentTheme = 'auto'; // 'auto', 'cyan', 'purple', 'green', 'red'
-const themes = {
-    'cyan': { r: 0, g: 200, b: 255, bg: [10, 15, 20] },
-    'purple': { r: 180, g: 80, b: 255, bg: [20, 10, 25] },
-    'green': { r: 50, g: 230, b: 150, bg: [10, 20, 15] },
-    'red': { r: 255, g: 60, b: 90, bg: [25, 10, 12] }
-};
+let currentLanguage = 'ko'; // 'ko', 'en'
 
 let cols, rows;
 let cellSize;
@@ -71,11 +47,11 @@ let pointerY = 0;
 let prevInputX = 0;
 let prevInputY = 0;
 let isMoving = false;
-let sensitivity = 0.75; // [Tuning] 감도를 낮춰 정교함 확보
-let groundFriction = 0.55; // [Tuning] 지면의 점성 저항 강화
+let sensitivity = 0.75;
+let groundFriction = 0.55;
 
 // 구체 변수 (Rolling Ball)
-let ballSize = 24; // [Update] 구슬 크기 증가
+let ballSize = 24;
 let ballScale = 1.0;
 let ballRotation = 0;
 let ballVelX = 0;
@@ -91,21 +67,11 @@ function setup() {
     terrainBuffer = createGraphics(width, height);
     terrainBuffer.background(0, 0);
 
-    // [New] 기록 & 설정 불러오기
+    // [New] 기록 불러오기
     loadRecords();
-    loadTheme();
-    loadLanguage();
+    loadSettings();
 
     initGame(1);
-
-    // [New] 언어 선택 버튼 이벤트
-    const koBtn = document.getElementById('lang-ko');
-    const enBtn = document.getElementById('lang-en');
-
-    if (koBtn) koBtn.onclick = () => setLanguage('ko');
-    if (enBtn) enBtn.onclick = () => setLanguage('en');
-
-    updateStartScreen(); // 시작 화면 텍스트 초기화
 
     const startBtn = document.getElementById('start-button');
     if (startBtn) {
@@ -126,9 +92,32 @@ function setup() {
             const hud = document.getElementById('hud');
             if (hud) {
                 hud.classList.remove('hidden');
-                updateHUDOnly();
+                updateHUD();
+
+                // 재시작 버튼 이벤트 연결
+                const restartBtn = document.getElementById('mini-restart');
+                if (restartBtn) {
+                    restartBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        if ("vibrate" in navigator) navigator.vibrate(30);
+                        currentDepth = 1;
+                        comboCount = 0;
+                        initGame(1);
+                        startTimer();
+                    };
+                }
+
+                // [New] 설정 버튼 이벤트
+                const settingsBtn = document.getElementById('settings-btn');
+                if (settingsBtn) {
+                    settingsBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        showSettingsModal();
+                    };
+                }
             }
             startTimer();
+            levelStartTime = Date.now();
         };
     }
     textFont('Outfit');
@@ -165,13 +154,9 @@ function initGame(depth) {
     terrainBuffer.clear();
     generateFullMaze();
 
-    const levelVal = document.getElementById('level-val');
-    if (levelVal) levelVal.innerText = (depth * 10) + "m";
-
-    // HUD 업데이트 (기록 표시 갱신을 위해)
-    updateHUDOnly();
-
+    updateHUD();
     isWon = false;
+    levelStartTime = Date.now();
 
     if (isStarted) {
         pointerX = startPos.x;
@@ -226,14 +211,14 @@ function generateFullMaze() {
     let potentialGoals = grid.filter(cell => {
         let d = Math.sqrt(Math.pow(cell.c - grid[startIndex].c, 2) + Math.pow(cell.r - grid[startIndex].r, 2));
         let cellY = (cell.r + 0.5) * cellSize;
-        return d > (cols + rows) / 2.8 && cellY > 120; // HUD 회피
+        return d > (cols + rows) / 2.8 && cellY > 120;
     });
 
     let goalCell = potentialGoals.length > 0 ? potentialGoals[Math.floor(Math.random() * potentialGoals.length)] : grid[grid.length - 1];
     goal = {
         x: (goalCell.c + 0.5) * cellSize,
         y: (goalCell.r + 0.5) * cellSize,
-        r: cellSize * 0.32
+        r: cellSize * 0.22 // [Update] 70% 축소 (0.32 -> 0.22)
     };
 }
 
@@ -255,11 +240,9 @@ function updateTrackpadInput() {
             prevInputX = ciX;
             prevInputY = ciY;
         } else {
-            // [Fix] 묵직한 가속을 위해 입력값을 댐핑 처리
             let targetDx = (ciX - prevInputX) * sensitivity;
             let targetDy = (ciY - prevInputY) * sensitivity;
 
-            // 점성 저항 적용 (이전보다 절반만 힘이 전달됨)
             ballVelX = targetDx * groundFriction;
             ballVelY = targetDy * groundFriction;
 
@@ -277,15 +260,13 @@ function updateTrackpadInput() {
                 if (!colW) {
                     pointerX = nX; pointerY = nY;
                     terrainBuffer.noStroke();
-                    terrainBuffer.fill(18, 16, 14, 4); // 더 은은한 궤적
+                    terrainBuffer.fill(18, 16, 14, 4);
                     terrainBuffer.ellipse(pointerX, pointerY, ballSize * 0.7, ballSize * 0.7);
                 } else {
-                    // [Update] 화면 흔들림 제거 (shakeAmount 비활성화)
                     if ("vibrate" in navigator) navigator.vibrate(20);
                     let pDX = pointerX - colW.x, pDY = pointerY - colW.y;
                     let dW = dist(0, 0, pDX, pDY);
                     if (dW > 0) {
-                        // 반발력을 22 -> 10으로 낮춰 자석처럼 붙는 느낌 억제
                         pointerX += (pDX / dW) * 10;
                         pointerY += (pDY / dW) * 10;
                     }
@@ -295,7 +276,7 @@ function updateTrackpadInput() {
         }
     } else {
         isMoving = false;
-        ballVelX *= 0.3; ballVelY *= 0.3; // 정지 마찰력 강화
+        ballVelX *= 0.3; ballVelY *= 0.3;
     }
 
     ballRotation += (ballVelX + ballVelY) * 0.12;
@@ -309,23 +290,13 @@ function updateTrackpadInput() {
 function draw() {
     try {
         updateTrackpadInput();
-
-        let tCol = getThemeColor();
-        updateHUDCSS(tCol); // [New] 상단 메뉴 CSS 실시간 업데이트
-
-        // 테마에 따른 배경색 적용 (기본값 또는 테마별 지정값)
-        if (tCol.bg) {
-            background(tCol.bg[0], tCol.bg[1], tCol.bg[2]);
-        } else {
-            // Auto 모드나 bg 정보가 없는 경우 동적으로 어두운 배경 생성
-            background(tCol.r * 0.05, tCol.g * 0.05, tCol.b * 0.05);
-        }
+        background(14, 13, 16);
 
         drawFloorTexture();
 
         terrainBuffer.push();
         terrainBuffer.blendMode(REMOVE);
-        terrainBuffer.fill(255, 1.0); // 자국이 더 오래 남게 (Heal 속도 하향)
+        terrainBuffer.fill(255, 1.0);
         terrainBuffer.rect(0, 0, width, height);
         terrainBuffer.pop();
         image(terrainBuffer, 0, 0);
@@ -337,12 +308,18 @@ function draw() {
         drawGoal();
 
         if (isStarted && !isWon) {
-            if (goal && dist(pointerX, pointerY, goal.x, goal.y) < goal.r * 0.45) winGame();
+            // [Update] 충돌 판정 확대 (0.45 -> 0.7)
+            if (goal && dist(pointerX, pointerY, goal.x, goal.y) < goal.r * 0.7) winGame();
 
             textAlign(CENTER, CENTER);
             fill(100, 150, 255, 40);
             textSize(10);
             text("DEEP LINK ENTRY", startPos.x, startPos.y);
+        }
+
+        // [New] 콤보 표시
+        if (comboCount >= 3) {
+            drawComboIndicator();
         }
 
         if (isWon) { ballScale *= 0.9; drawWinScreen(); }
@@ -365,14 +342,13 @@ function drawFloorTexture() {
 
 function drawVisibleMaze() {
     // [Update] Fog of War: 구슬 주변의 벽만 표시
-    let visibilityRadius = 180; // 가시 반경
+    let visibilityRadius = 180;
 
     for (let wall of mazeWalls) {
         let distToPlayer = dist(wall.x, wall.y, pointerX, pointerY);
         if (distToPlayer < visibilityRadius) {
             push(); translate(wall.x, wall.y);
             noStroke();
-            // 거리에 따른 페이드 효과
             let alpha = map(distToPlayer, 0, visibilityRadius, 240, 50);
             fill(38, 36, 45, alpha);
             beginShape();
@@ -390,19 +366,19 @@ function drawVisibleMaze() {
 function drawGoal() {
     if (!goal) return;
 
-    // Fog of War: 포털도 가시 범위 내에서만 표시
     let distToGoal = dist(pointerX, pointerY, goal.x, goal.y);
-    if (distToGoal > 200) return; // 가시 범위 밖이면 숨김
+    if (distToGoal > 200) return;
 
     push();
     translate(goal.x, goal.y);
 
-    let tCol = getThemeColor();
+    // [New] 깊이별 테마 색상
+    let themeColor = getThemeColor(currentDepth);
 
     // 1. 외곽 글로우
     noStroke();
     for (let i = 5; i > 0; i--) {
-        fill(tCol.r, tCol.g, tCol.b, (6 - i) * 8);
+        fill(themeColor.r, themeColor.g, themeColor.b, (6 - i) * 8);
         ellipse(0, 0, goal.r * 3.5 + i * 15, goal.r * 3.5 + i * 15);
     }
 
@@ -411,7 +387,7 @@ function drawGoal() {
     for (let layer = 0; layer < 4; layer++) {
         push();
         rotate(frameCount * 0.02 * (layer % 2 === 0 ? 1 : -1));
-        stroke(tCol.r, tCol.g - layer * 20, tCol.b, 180 - layer * 30);
+        stroke(themeColor.r, themeColor.g - layer * 30, themeColor.b, 180 - layer * 30);
         strokeWeight(2 - layer * 0.3);
         let hexSize = goal.r * (2.2 - layer * 0.4);
         drawHexagon(0, 0, hexSize);
@@ -421,11 +397,11 @@ function drawGoal() {
     // 3. 내부 코어 (Pulsing Core)
     let pulse = sin(frameCount * 0.08) * 0.2 + 1;
     noStroke();
-    fill(tCol.r, tCol.g + 50, tCol.b + 50, 200);
+    fill(themeColor.r, themeColor.g, themeColor.b, 200);
     ellipse(0, 0, goal.r * 1.5 * pulse, goal.r * 1.5 * pulse);
-    fill(tCol.r + 50, tCol.g + 100, tCol.b + 100, 150);
+    fill(themeColor.r + 100, themeColor.g, themeColor.b, 150);
     ellipse(0, 0, goal.r * 1.0 * pulse, goal.r * 1.0 * pulse);
-    fill(tCol.r + 100, tCol.g + 150, tCol.b + 150, 100);
+    fill(200, themeColor.g, themeColor.b, 100);
     ellipse(0, 0, goal.r * 0.5 * pulse, goal.r * 0.5 * pulse);
 
     // 4. 회전 입자들
@@ -433,7 +409,7 @@ function drawGoal() {
         let angle = (frameCount * 0.03) + (i * TWO_PI / 8);
         let px = cos(angle) * goal.r * 2;
         let py = sin(angle) * goal.r * 2;
-        fill(tCol.r, tCol.g + 50, tCol.b + 50, 200);
+        fill(themeColor.r, themeColor.g, themeColor.b, 200);
         ellipse(px, py, 3, 3);
     }
 
@@ -454,20 +430,21 @@ function drawHexagon(x, y, radius) {
 function drawBall(x, y, scale, rotation) {
     push(); translate(x, y);
 
-    let tCol = getThemeColor();
+    // [New] 깊이별 테마 색상
+    let themeColor = getThemeColor(currentDepth);
 
     // 1. 외곽 글로우
     noStroke();
     for (let i = 3; i > 0; i--) {
-        fill(tCol.r, tCol.g, tCol.b, (4 - i) * 15);
+        fill(themeColor.r, themeColor.g, themeColor.b, (4 - i) * 15);
         ellipse(0, 0, (ballSize + i * 12) * scale);
     }
 
-    // 2. 회전하는 육각형 링 (작은 버전)
+    // 2. 회전하는 육각형 링
     noFill();
     push();
     rotate(frameCount * 0.03);
-    stroke(tCol.r, tCol.g + 20, tCol.b + 20, 150);
+    stroke(themeColor.r, themeColor.g, themeColor.b, 150);
     strokeWeight(1.5);
     drawHexagon(0, 0, ballSize * 0.6 * scale);
     pop();
@@ -475,15 +452,15 @@ function drawBall(x, y, scale, rotation) {
     // 3. 구슬 본체
     let s = ballSize * scale;
     noStroke();
-    fill(20, 25, 35); // 어두운 코어
+    fill(20, 25, 35);
     ellipse(0, 0, s, s);
-    fill(tCol.r, tCol.g - 20, tCol.b - 20, 100); // 바디 컬러
+    fill(themeColor.r * 0.3, themeColor.g * 0.7, themeColor.b * 0.9, 100);
     ellipse(0, 0, s * 0.85, s * 0.85);
 
     // 4. 중앙 빛나는 코어
-    fill(tCol.r, tCol.g + 50, tCol.b + 50, 200);
+    fill(themeColor.r, themeColor.g, themeColor.b, 200);
     ellipse(0, 0, s * 0.4, s * 0.4);
-    fill(200, 255, 255);
+    fill(200, themeColor.g, themeColor.b);
     ellipse(0, 0, s * 0.2, s * 0.2);
 
     pop();
@@ -493,10 +470,26 @@ function winGame() {
     if (isWon) return;
     isWon = true;
 
+    // [New] 콤보 시스템
+    let now = Date.now();
+    if (now - lastClearTime < 5000) {
+        comboCount++;
+        if (comboCount >= 3) {
+            if ("vibrate" in navigator) navigator.vibrate([50, 30, 50, 30, 100]);
+        }
+    } else {
+        comboCount = 1;
+    }
+    lastClearTime = now;
+
+    if (comboTimeout) clearTimeout(comboTimeout);
+    comboTimeout = setTimeout(() => { comboCount = 0; }, 5000);
+
     // [New] 기록 갱신 체크
     if (currentDepth > bestDepth) {
         bestDepth = currentDepth;
         saveRecords();
+        if ("vibrate" in navigator) navigator.vibrate([100, 50, 100, 50, 200]);
     }
 
     clearInterval(timerInterval);
@@ -505,7 +498,91 @@ function winGame() {
 }
 
 function drawWinScreen() {
-    textAlign(CENTER, CENTER); fill(255); textSize(35); text("DESCENDING...", width / 2, height / 2);
+    textAlign(CENTER, CENTER);
+    fill(255);
+    textSize(35);
+    text("DESCENDING...", width / 2, height / 2);
+}
+
+function drawComboIndicator() {
+    push();
+    textAlign(CENTER, CENTER);
+    let pulse = sin(frameCount * 0.15) * 0.2 + 1;
+    textSize(40 * pulse);
+    fill(255, 200, 0, 200);
+    text(`COMBO x${comboCount}! 🔥`, width / 2, height / 2 - 100);
+    pop();
+}
+
+// [New] 깊이별 테마 색상
+function getThemeColor(depth) {
+    if (currentTheme !== 'auto') {
+        return getFixedThemeColor(currentTheme);
+    }
+
+    // Auto 모드: 깊이별 자동 변화
+    if (depth < 5) return { r: 0, g: 200, b: 255 };      // Cyan
+    if (depth < 10) return { r: 0, g: 220, b: 200 };     // Cyan-Green
+    if (depth < 20) return { r: 100, g: 200, b: 255 };   // Light Blue
+    if (depth < 30) return { r: 150, g: 100, b: 255 };   // Purple-Blue
+    if (depth < 50) return { r: 200, g: 50, b: 255 };    // Purple
+    return { r: 255, g: 100, b: 200 };                   // Pink-Purple
+}
+
+function getFixedThemeColor(theme) {
+    const themes = {
+        'cyan': { r: 0, g: 200, b: 255 },
+        'purple': { r: 200, g: 50, b: 255 },
+        'green': { r: 50, g: 255, b: 150 },
+        'red': { r: 255, g: 50, b: 100 }
+    };
+    return themes[theme] || themes['cyan'];
+}
+
+// [New] 기록 저장/불러오기
+function loadRecords() {
+    try {
+        let saved = localStorage.getItem('fingerMaze_records');
+        if (saved) {
+            let data = JSON.parse(saved);
+            bestDepth = data.bestDepth || 0;
+            bestTime = data.bestTime || Infinity;
+        }
+    } catch (e) { }
+}
+
+function saveRecords() {
+    try {
+        localStorage.setItem('fingerMaze_records', JSON.stringify({
+            bestDepth: bestDepth,
+            bestTime: bestTime
+        }));
+    } catch (e) { }
+}
+
+// [New] HUD 업데이트
+function updateHUD() {
+    const hud = document.getElementById('hud');
+    if (!hud) return;
+
+    hud.innerHTML = `
+        <div class="hud-item">DEPTH <span id="level-val">${currentDepth * 10}m</span> ${bestDepth > 0 ? `<span class="record">⭐${bestDepth * 10}m</span>` : ''}</div>
+        <div class="hud-item">TIME <span id="timer-val">00:00</span></div>
+        ${comboCount >= 3 ? `<div class="hud-item combo">COMBO <span>x${comboCount}</span></div>` : ''}
+        <button id="mini-restart" class="hud-btn">RESTART</button>
+    `;
+
+    const restartBtn = document.getElementById('mini-restart');
+    if (restartBtn) {
+        restartBtn.onclick = (e) => {
+            e.stopPropagation();
+            if ("vibrate" in navigator) navigator.vibrate(30);
+            currentDepth = 1;
+            comboCount = 0;
+            initGame(1);
+            startTimer();
+        };
+    }
 }
 
 function startTimer() {
@@ -535,141 +612,54 @@ function removeWalls(a, b) {
     let y = a.r - b.r; if (y === 1) { a.walls[0] = false; b.walls[2] = false; } else if (y === -1) { a.walls[2] = false; b.walls[0] = false; }
 }
 function windowResized() { resizeCanvas(windowWidth, windowHeight); terrainBuffer.resizeCanvas(width, height); }
-
-// [New] 기록 시스템 함수들
-function loadRecords() {
+// [New] 설정 저장/불러오기
+function loadSettings() {
     try {
-        let saved = localStorage.getItem('fingerMaze_records');
+        let saved = localStorage.getItem('fingerMaze_settings');
         if (saved) {
             let data = JSON.parse(saved);
-            bestDepth = data.bestDepth || 0;
+            currentTheme = data.theme || 'auto';
+            currentLanguage = data.language || 'ko';
         }
-    } catch (e) { console.error("Failed to load records:", e); }
+    } catch (e) { }
 }
 
-function saveRecords() {
+function saveSettings() {
     try {
-        localStorage.setItem('fingerMaze_records', JSON.stringify({
-            bestDepth: bestDepth
+        localStorage.setItem('fingerMaze_settings', JSON.stringify({
+            theme: currentTheme,
+            language: currentLanguage
         }));
-    } catch (e) { console.error("Failed to save records:", e); }
+    } catch (e) { }
 }
 
-function updateHUDOnly() {
+// [New] 다국어 시스템
+const translations = {
+    ko: { depth: '깊이', time: '시간', combo: '콤보', restart: '재시작', settings: '설정', theme: '색상 테마', language: '언어', auto: '자동', cyan: '청록색', purple: '보라색', green: '초록색', red: '빨간색', korean: '한국어', english: 'English', close: '닫기', descending: '하강 중...' },
+    en: { depth: 'DEPTH', time: 'TIME', combo: 'COMBO', restart: 'RESTART', settings: 'SETTINGS', theme: 'Color Theme', language: 'Language', auto: 'Auto', cyan: 'Cyan', purple: 'Purple', green: 'Green', red: 'Red', korean: '한국어', english: 'English', close: 'Close', descending: 'DESCENDING...' }
+};
+
+function t(key) { return translations[currentLanguage][key] || key; }
+
+// [New] 설정 모달
+function showSettingsModal() {
+    const modal = document.createElement('div');
+    modal.id = 'settings-modal';
+    modal.className = 'modal';
+    modal.innerHTML = <div class=\"modal-content\"><h2>⚙️ +t('settings')+</h2><div class=\"setting-group\"><label>+t('theme')+</label><select id=\"theme-select\"><option value=\"auto\" +(currentTheme === 'auto' ? 'selected' : '')+>+t('auto')+</option><option value=\"cyan\" +(currentTheme === 'cyan' ? 'selected' : '')+>+t('cyan')+</option><option value=\"purple\" +(currentTheme === 'purple' ? 'selected' : '')+>+t('purple')+</option><option value=\"green\" +(currentTheme === 'green' ? 'selected' : '')+>+t('green')+</option><option value=\"red\" +(currentTheme === 'red' ? 'selected' : '')+>+t('red')+</option></select></div><div class=\"setting-group\"><label>+t('language')+</label><select id=\"language-select\"><option value=\"ko\" +(currentLanguage === 'ko' ? 'selected' : '')+>+t('korean')+</option><option value=\"en\" +(currentLanguage === 'en' ? 'selected' : '')+>+t('english')+</option></select></div><button id=\"close-settings\" class=\"hud-btn\">+t('close')+</button></div>;
+    document.body.appendChild(modal);
+    document.getElementById('theme-select').onchange = (e) => { currentTheme = e.target.value; saveSettings(); };
+    document.getElementById('language-select').onchange = (e) => { currentLanguage = e.target.value; saveSettings(); updateHUD(); };
+    document.getElementById('close-settings').onclick = () => modal.remove();
+    modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+}
+
+function updateHUD() {
     const hud = document.getElementById('hud');
-    if (!hud || !isStarted) return;
-
-    hud.innerHTML = `
-        <div class="hud-item">${t('depth').toUpperCase()} <span id="level-val">${currentDepth * 10}m</span> ${bestDepth > 0 ? `<span class="record">⭐${bestDepth * 10}m</span>` : ''}</div>
-        <div class="hud-item">${t('time').toUpperCase()} <span id="timer-val">00:00</span></div>
-        <div class="hud-item-btn-group">
-            <button id="mini-restart" class="hud-btn">${t('restart').toUpperCase()}</button>
-            <button id="theme-btn" class="hud-btn">${t('color').toUpperCase()}</button>
-        </div>
-    `;
-
-    // 버튼 이벤트 다시 연결
+    if (!hud) return;
+    hud.innerHTML = <div class=\"hud-item\">+t('depth').toUpperCase()+ <span id=\"level-val\">+(currentDepth * 10)+m</span> +(bestDepth > 0 ? <span class=\"record\">⭐+(bestDepth * 10)+m</span> : '')+</div><div class=\"hud-item\">+t('time').toUpperCase()+ <span id=\"timer-val\">00:00</span></div>+(comboCount >= 3 ? <div class=\"hud-item combo\">+t('combo').toUpperCase()+ <span>x+comboCount+</span></div> : '')+<button id=\"mini-restart\" class=\"hud-btn\">+t('restart').toUpperCase()+</button><button id=\"settings-btn\" class=\"hud-btn\">⚙️</button>;
     const restartBtn = document.getElementById('mini-restart');
-    if (restartBtn) {
-        restartBtn.onclick = (e) => {
-            e.stopPropagation();
-            if ("vibrate" in navigator) navigator.vibrate(30);
-            currentDepth = 1;
-            initGame(1);
-            startTimer();
-        };
-    }
-
-    const themeBtn = document.getElementById('theme-btn');
-    if (themeBtn) {
-        themeBtn.onclick = (e) => {
-            e.stopPropagation();
-            cycleTheme();
-        };
-    }
-}
-
-// [New] 테마 시스템 함수들
-function getThemeColor() {
-    if (currentTheme === 'auto') {
-        const depth = currentDepth;
-        if (depth < 5) return themes['cyan'];
-        if (depth < 10) return { r: 50, g: 200, b: 200 };
-        if (depth < 20) return { r: 100, g: 150, b: 255 };
-        if (depth < 30) return themes['purple'];
-        if (depth < 50) return { r: 255, g: 100, b: 200 };
-        return themes['red'];
-    }
-    return themes[currentTheme] || themes['cyan'];
-}
-
-function cycleTheme() {
-    const themeKeys = ['auto', 'cyan', 'purple', 'green', 'red'];
-    let idx = themeKeys.indexOf(currentTheme);
-    idx = (idx + 1) % themeKeys.length;
-    currentTheme = themeKeys[idx];
-    saveTheme();
-    if ("vibrate" in navigator) navigator.vibrate(20);
-}
-
-function loadTheme() {
-    try {
-        let saved = localStorage.getItem('fingerMaze_theme');
-        if (saved) currentTheme = saved;
-    } catch (e) { }
-}
-
-function saveTheme() {
-    try {
-        localStorage.setItem('fingerMaze_theme', currentTheme);
-    } catch (e) { }
-}
-
-// [New] HUD CSS 변수 업데이트 함수
-function updateHUDCSS(col) {
-    const root = document.documentElement;
-    const r = col.r, g = col.g, b = col.b;
-    root.style.setProperty('--theme-color', `rgb(${r}, ${g}, ${b})`);
-    root.style.setProperty('--theme-glow', `rgba(${r}, ${g}, ${b}, 0.5)`);
-    root.style.setProperty('--theme-bg-glow', `rgba(${r}, ${g}, ${b}, 0.1)`);
-}
-
-// [New] 언어 관련 함수들
-function setLanguage(lang) {
-    currentLanguage = lang;
-    saveLanguage();
-
-    // 버튼 UI 업데이트
-    document.getElementById('lang-ko').classList.toggle('active', lang === 'ko');
-    document.getElementById('lang-en').classList.toggle('active', lang === 'en');
-
-    updateStartScreen();
-    if (isStarted) updateHUDOnly();
-    if ("vibrate" in navigator) navigator.vibrate(20);
-}
-
-function updateStartScreen() {
-    const title = document.getElementById('title');
-    const instr = document.getElementById('instruction');
-    const startBtn = document.getElementById('start-button');
-
-    if (title) title.innerText = t('title');
-    if (instr) instr.innerText = t('instruction');
-    if (startBtn) startBtn.innerText = t('start');
-}
-
-function loadLanguage() {
-    try {
-        let saved = localStorage.getItem('fingerMaze_lang');
-        if (saved) {
-            currentLanguage = saved;
-            setLanguage(saved);
-        }
-    } catch (e) { }
-}
-
-function saveLanguage() {
-    try {
-        localStorage.setItem('fingerMaze_lang', currentLanguage);
-    } catch (e) { }
+    if (restartBtn) { restartBtn.onclick = (e) => { e.stopPropagation(); if (\"vibrate\" in navigator) navigator.vibrate(30); currentDepth = 1; comboCount = 0; initGame(1); startTimer(); }; }
+    const settingsBtn = document.getElementById('settings-btn');
+    if (settingsBtn) { settingsBtn.onclick = (e) => { e.stopPropagation(); showSettingsModal(); }; }
 }

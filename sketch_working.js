@@ -13,48 +13,6 @@ let isWon = false;
 let currentDepth = 1;
 let startTime;
 let timerInterval;
-
-// [New] 설정 & 다국어 시스템
-let currentLanguage = 'ko'; // 'ko', 'en'
-const translations = {
-    ko: {
-        title: "Finger Maze",
-        instruction: "미로를 따라 하얀 빛을 목적지까지 인도하세요.",
-        start: "탐험 시작",
-        depth: "깊이",
-        time: "시간",
-        restart: "재시작",
-        color: "색상",
-        descending: "하강 중..."
-    },
-    en: {
-        title: "Finger Maze",
-        instruction: "Guide the white light through the maze to the portal.",
-        start: "START EXPLORING",
-        depth: "DEPTH",
-        time: "TIME",
-        restart: "RESTART",
-        color: "COLOR",
-        descending: "DESCENDING..."
-    }
-};
-
-function t(key) {
-    return translations[currentLanguage][key] || key;
-}
-
-// [New] 기록 시스템
-let bestDepth = 0;
-
-// [New] 테마 시스템
-let currentTheme = 'auto'; // 'auto', 'cyan', 'purple', 'green', 'red'
-const themes = {
-    'cyan': { r: 0, g: 200, b: 255, bg: [10, 15, 20] },
-    'purple': { r: 180, g: 80, b: 255, bg: [20, 10, 25] },
-    'green': { r: 50, g: 230, b: 150, bg: [10, 20, 15] },
-    'red': { r: 255, g: 60, b: 90, bg: [25, 10, 12] }
-};
-
 let cols, rows;
 let cellSize;
 let grid = [];
@@ -91,21 +49,7 @@ function setup() {
     terrainBuffer = createGraphics(width, height);
     terrainBuffer.background(0, 0);
 
-    // [New] 기록 & 설정 불러오기
-    loadRecords();
-    loadTheme();
-    loadLanguage();
-
     initGame(1);
-
-    // [New] 언어 선택 버튼 이벤트
-    const koBtn = document.getElementById('lang-ko');
-    const enBtn = document.getElementById('lang-en');
-
-    if (koBtn) koBtn.onclick = () => setLanguage('ko');
-    if (enBtn) enBtn.onclick = () => setLanguage('en');
-
-    updateStartScreen(); // 시작 화면 텍스트 초기화
 
     const startBtn = document.getElementById('start-button');
     if (startBtn) {
@@ -126,7 +70,24 @@ function setup() {
             const hud = document.getElementById('hud');
             if (hud) {
                 hud.classList.remove('hidden');
-                updateHUDOnly();
+                // [Update] RESTART 버튼을 포함한 HUD 구성
+                hud.innerHTML = `
+                    <div class="hud-item">DEPTH <span id="level-val">10m</span></div>
+                    <div class="hud-item">TIME <span id="timer-val">00:00</span></div>
+                    <button id="mini-restart" class="hud-btn">RESTART</button>
+                `;
+
+                // 재시작 버튼 이벤트 연결
+                const restartBtn = document.getElementById('mini-restart');
+                if (restartBtn) {
+                    restartBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        if ("vibrate" in navigator) navigator.vibrate(30);
+                        currentDepth = 1;
+                        initGame(1);
+                        startTimer();
+                    };
+                }
             }
             startTimer();
         };
@@ -167,10 +128,6 @@ function initGame(depth) {
 
     const levelVal = document.getElementById('level-val');
     if (levelVal) levelVal.innerText = (depth * 10) + "m";
-
-    // HUD 업데이트 (기록 표시 갱신을 위해)
-    updateHUDOnly();
-
     isWon = false;
 
     if (isStarted) {
@@ -309,17 +266,7 @@ function updateTrackpadInput() {
 function draw() {
     try {
         updateTrackpadInput();
-
-        let tCol = getThemeColor();
-        updateHUDCSS(tCol); // [New] 상단 메뉴 CSS 실시간 업데이트
-
-        // 테마에 따른 배경색 적용 (기본값 또는 테마별 지정값)
-        if (tCol.bg) {
-            background(tCol.bg[0], tCol.bg[1], tCol.bg[2]);
-        } else {
-            // Auto 모드나 bg 정보가 없는 경우 동적으로 어두운 배경 생성
-            background(tCol.r * 0.05, tCol.g * 0.05, tCol.b * 0.05);
-        }
+        background(14, 13, 16);
 
         drawFloorTexture();
 
@@ -397,12 +344,11 @@ function drawGoal() {
     push();
     translate(goal.x, goal.y);
 
-    let tCol = getThemeColor();
-
+    // [Update] 미래형 포털 (텍스트 제거)
     // 1. 외곽 글로우
     noStroke();
     for (let i = 5; i > 0; i--) {
-        fill(tCol.r, tCol.g, tCol.b, (6 - i) * 8);
+        fill(0, 200, 255, (6 - i) * 8);
         ellipse(0, 0, goal.r * 3.5 + i * 15, goal.r * 3.5 + i * 15);
     }
 
@@ -411,7 +357,7 @@ function drawGoal() {
     for (let layer = 0; layer < 4; layer++) {
         push();
         rotate(frameCount * 0.02 * (layer % 2 === 0 ? 1 : -1));
-        stroke(tCol.r, tCol.g - layer * 20, tCol.b, 180 - layer * 30);
+        stroke(0, 220 - layer * 30, 255, 180 - layer * 30);
         strokeWeight(2 - layer * 0.3);
         let hexSize = goal.r * (2.2 - layer * 0.4);
         drawHexagon(0, 0, hexSize);
@@ -421,11 +367,11 @@ function drawGoal() {
     // 3. 내부 코어 (Pulsing Core)
     let pulse = sin(frameCount * 0.08) * 0.2 + 1;
     noStroke();
-    fill(tCol.r, tCol.g + 50, tCol.b + 50, 200);
+    fill(0, 255, 255, 200);
     ellipse(0, 0, goal.r * 1.5 * pulse, goal.r * 1.5 * pulse);
-    fill(tCol.r + 50, tCol.g + 100, tCol.b + 100, 150);
+    fill(100, 255, 255, 150);
     ellipse(0, 0, goal.r * 1.0 * pulse, goal.r * 1.0 * pulse);
-    fill(tCol.r + 100, tCol.g + 150, tCol.b + 150, 100);
+    fill(200, 255, 255, 100);
     ellipse(0, 0, goal.r * 0.5 * pulse, goal.r * 0.5 * pulse);
 
     // 4. 회전 입자들
@@ -433,7 +379,7 @@ function drawGoal() {
         let angle = (frameCount * 0.03) + (i * TWO_PI / 8);
         let px = cos(angle) * goal.r * 2;
         let py = sin(angle) * goal.r * 2;
-        fill(tCol.r, tCol.g + 50, tCol.b + 50, 200);
+        fill(0, 255, 255, 200);
         ellipse(px, py, 3, 3);
     }
 
@@ -454,12 +400,11 @@ function drawHexagon(x, y, radius) {
 function drawBall(x, y, scale, rotation) {
     push(); translate(x, y);
 
-    let tCol = getThemeColor();
-
-    // 1. 외곽 글로우
+    // [Update] 포털 스타일 구슬 디자인
+    // 1. 외곽 글로우 (포털과 동일한 청록색)
     noStroke();
     for (let i = 3; i > 0; i--) {
-        fill(tCol.r, tCol.g, tCol.b, (4 - i) * 15);
+        fill(0, 200, 255, (4 - i) * 15);
         ellipse(0, 0, (ballSize + i * 12) * scale);
     }
 
@@ -467,7 +412,7 @@ function drawBall(x, y, scale, rotation) {
     noFill();
     push();
     rotate(frameCount * 0.03);
-    stroke(tCol.r, tCol.g + 20, tCol.b + 20, 150);
+    stroke(0, 220, 255, 150);
     strokeWeight(1.5);
     drawHexagon(0, 0, ballSize * 0.6 * scale);
     pop();
@@ -477,11 +422,11 @@ function drawBall(x, y, scale, rotation) {
     noStroke();
     fill(20, 25, 35); // 어두운 코어
     ellipse(0, 0, s, s);
-    fill(tCol.r, tCol.g - 20, tCol.b - 20, 100); // 바디 컬러
+    fill(0, 180, 220, 100); // 청록색 오버레이
     ellipse(0, 0, s * 0.85, s * 0.85);
 
     // 4. 중앙 빛나는 코어
-    fill(tCol.r, tCol.g + 50, tCol.b + 50, 200);
+    fill(0, 255, 255, 200);
     ellipse(0, 0, s * 0.4, s * 0.4);
     fill(200, 255, 255);
     ellipse(0, 0, s * 0.2, s * 0.2);
@@ -492,13 +437,6 @@ function drawBall(x, y, scale, rotation) {
 function winGame() {
     if (isWon) return;
     isWon = true;
-
-    // [New] 기록 갱신 체크
-    if (currentDepth > bestDepth) {
-        bestDepth = currentDepth;
-        saveRecords();
-    }
-
     clearInterval(timerInterval);
     if ("vibrate" in navigator) navigator.vibrate([100, 50, 200]);
     setTimeout(() => { currentDepth++; initGame(currentDepth); }, 2000);
@@ -535,141 +473,3 @@ function removeWalls(a, b) {
     let y = a.r - b.r; if (y === 1) { a.walls[0] = false; b.walls[2] = false; } else if (y === -1) { a.walls[2] = false; b.walls[0] = false; }
 }
 function windowResized() { resizeCanvas(windowWidth, windowHeight); terrainBuffer.resizeCanvas(width, height); }
-
-// [New] 기록 시스템 함수들
-function loadRecords() {
-    try {
-        let saved = localStorage.getItem('fingerMaze_records');
-        if (saved) {
-            let data = JSON.parse(saved);
-            bestDepth = data.bestDepth || 0;
-        }
-    } catch (e) { console.error("Failed to load records:", e); }
-}
-
-function saveRecords() {
-    try {
-        localStorage.setItem('fingerMaze_records', JSON.stringify({
-            bestDepth: bestDepth
-        }));
-    } catch (e) { console.error("Failed to save records:", e); }
-}
-
-function updateHUDOnly() {
-    const hud = document.getElementById('hud');
-    if (!hud || !isStarted) return;
-
-    hud.innerHTML = `
-        <div class="hud-item">${t('depth').toUpperCase()} <span id="level-val">${currentDepth * 10}m</span> ${bestDepth > 0 ? `<span class="record">⭐${bestDepth * 10}m</span>` : ''}</div>
-        <div class="hud-item">${t('time').toUpperCase()} <span id="timer-val">00:00</span></div>
-        <div class="hud-item-btn-group">
-            <button id="mini-restart" class="hud-btn">${t('restart').toUpperCase()}</button>
-            <button id="theme-btn" class="hud-btn">${t('color').toUpperCase()}</button>
-        </div>
-    `;
-
-    // 버튼 이벤트 다시 연결
-    const restartBtn = document.getElementById('mini-restart');
-    if (restartBtn) {
-        restartBtn.onclick = (e) => {
-            e.stopPropagation();
-            if ("vibrate" in navigator) navigator.vibrate(30);
-            currentDepth = 1;
-            initGame(1);
-            startTimer();
-        };
-    }
-
-    const themeBtn = document.getElementById('theme-btn');
-    if (themeBtn) {
-        themeBtn.onclick = (e) => {
-            e.stopPropagation();
-            cycleTheme();
-        };
-    }
-}
-
-// [New] 테마 시스템 함수들
-function getThemeColor() {
-    if (currentTheme === 'auto') {
-        const depth = currentDepth;
-        if (depth < 5) return themes['cyan'];
-        if (depth < 10) return { r: 50, g: 200, b: 200 };
-        if (depth < 20) return { r: 100, g: 150, b: 255 };
-        if (depth < 30) return themes['purple'];
-        if (depth < 50) return { r: 255, g: 100, b: 200 };
-        return themes['red'];
-    }
-    return themes[currentTheme] || themes['cyan'];
-}
-
-function cycleTheme() {
-    const themeKeys = ['auto', 'cyan', 'purple', 'green', 'red'];
-    let idx = themeKeys.indexOf(currentTheme);
-    idx = (idx + 1) % themeKeys.length;
-    currentTheme = themeKeys[idx];
-    saveTheme();
-    if ("vibrate" in navigator) navigator.vibrate(20);
-}
-
-function loadTheme() {
-    try {
-        let saved = localStorage.getItem('fingerMaze_theme');
-        if (saved) currentTheme = saved;
-    } catch (e) { }
-}
-
-function saveTheme() {
-    try {
-        localStorage.setItem('fingerMaze_theme', currentTheme);
-    } catch (e) { }
-}
-
-// [New] HUD CSS 변수 업데이트 함수
-function updateHUDCSS(col) {
-    const root = document.documentElement;
-    const r = col.r, g = col.g, b = col.b;
-    root.style.setProperty('--theme-color', `rgb(${r}, ${g}, ${b})`);
-    root.style.setProperty('--theme-glow', `rgba(${r}, ${g}, ${b}, 0.5)`);
-    root.style.setProperty('--theme-bg-glow', `rgba(${r}, ${g}, ${b}, 0.1)`);
-}
-
-// [New] 언어 관련 함수들
-function setLanguage(lang) {
-    currentLanguage = lang;
-    saveLanguage();
-
-    // 버튼 UI 업데이트
-    document.getElementById('lang-ko').classList.toggle('active', lang === 'ko');
-    document.getElementById('lang-en').classList.toggle('active', lang === 'en');
-
-    updateStartScreen();
-    if (isStarted) updateHUDOnly();
-    if ("vibrate" in navigator) navigator.vibrate(20);
-}
-
-function updateStartScreen() {
-    const title = document.getElementById('title');
-    const instr = document.getElementById('instruction');
-    const startBtn = document.getElementById('start-button');
-
-    if (title) title.innerText = t('title');
-    if (instr) instr.innerText = t('instruction');
-    if (startBtn) startBtn.innerText = t('start');
-}
-
-function loadLanguage() {
-    try {
-        let saved = localStorage.getItem('fingerMaze_lang');
-        if (saved) {
-            currentLanguage = saved;
-            setLanguage(saved);
-        }
-    } catch (e) { }
-}
-
-function saveLanguage() {
-    try {
-        localStorage.setItem('fingerMaze_lang', currentLanguage);
-    } catch (e) { }
-}
